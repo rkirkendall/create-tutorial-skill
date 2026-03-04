@@ -34,10 +34,10 @@ Copy the directory into your agent's skills folder:
 
 ```bash
 # Claude Code
-cp -r create-tutorial ~/.claude/skills/create-tutorial
+mkdir -p ~/.claude/skills && cp -r create-tutorial ~/.claude/skills/create-tutorial
 
 # Cursor
-cp -r create-tutorial ~/.cursor/skills/create-tutorial
+mkdir -p ~/.cursor/skills && cp -r create-tutorial ~/.cursor/skills/create-tutorial
 ```
 
 See the [full agent path table](https://github.com/vercel-labs/add-skill#supported-agents) for other agents. Restart your session for the skill to take effect.
