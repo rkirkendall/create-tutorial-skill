@@ -1,18 +1,30 @@
 ---
 name: create-tutorial
-description: Creates an interactive Claude Code tutorial or setup wizard for any repository. Analyzes the repo's documentation, setup steps, and configuration to produce a guided, conversational experience that walks users from clone to fully functional.
+description: Creates an interactive Claude Code tutorial or setup wizard for any repository through a collaborative dialogue. Analyzes the repo, asks clarifying questions, proposes an outline for user approval, then generates the tutorial files. Use when asked to create a tutorial, setup wizard, onboarding flow, or getting-started guide for a repo.
 disable-model-invocation: true
 ---
 
 # Create Tutorial
 
-Build an interactive Claude Code tutorial or setup wizard for a repository. The result is a set of files that live inside the target repo so that a user can run a single slash command and be guided through setup, configuration, or learning — conversationally, step by step.
+Build an interactive Claude Code tutorial or setup wizard for a repository. This is a **collaborative process** — you and the user design the tutorial together through a series of checkpoints before any files are generated.
+
+The end result is a set of files inside the target repo's `.claude/` directory so that a user can run a single slash command and be guided through setup, configuration, or learning.
+
+**This skill is a dialogue, not a script.** You will:
+
+1. Analyze the repo and present your findings
+2. Ask questions about anything unclear
+3. Propose a tutorial outline and get approval
+4. Draft each section and confirm before finalizing
+5. Generate the files only after alignment
+
+Never silently generate tutorial files without the user reviewing and approving the plan first.
 
 ---
 
 ## Phase 1: Analyze the Repository
 
-Before writing anything, deeply understand the repo you're building a tutorial for.
+Read the repo thoroughly before talking to the user. Understand what the project does, how it's set up, and where the friction is.
 
 ### What to read
 
@@ -33,37 +45,99 @@ Build a mental model of:
 5. **Sensitive data** — What values are secrets that must never appear in conversation history?
 6. **Validation checks** — How do you confirm each step succeeded?
 
+### CHECKPOINT 1: Present your findings
+
+After analyzing, present a summary to the user. Format it like this:
+
+> **Here's what I found in the repo:**
+>
+> - **What it does:** [one-sentence project summary]
+> - **Prerequisites:** [list]
+> - **Setup steps I identified:** [numbered list of the major steps a user goes through]
+> - **Decision points:** [where users choose between options]
+> - **External actions required:** [things users do outside the terminal — tokens, OAuth, etc.]
+> - **Things I can automate:** [file generation, CLI commands, validation]
+> - **Secrets/credentials needed:** [list, noting these will never be handled in conversation]
+>
+> **Questions I have:**
+> - [Anything unclear, ambiguous, or undocumented]
+> - [Anything that could go multiple ways and you need the author's intent]
+> - [Any steps where you're unsure of the order or dependencies]
+>
+> **Does this look right? Anything I'm missing or getting wrong?**
+
+Wait for the user to respond. They may correct your understanding, fill in gaps, add context about their intended audience, or clarify priorities. Incorporate their feedback before moving on.
+
+If you have no questions, still present the findings summary and ask the user to confirm or correct before proceeding.
+
 ---
 
-## Phase 2: Design the Flow
+## Phase 2: Propose the Tutorial Outline
 
-### Principles
+Based on your analysis and the user's feedback, propose a structured outline for the tutorial. This is where the user shapes the flow before you write anything.
+
+### Design principles to follow
 
 - **Linear by default.** The user moves forward step by step. Avoid branching trees — use conditional sections within a linear path instead.
-- **Minimize friction.** No "are you ready?" prompts. No unnecessary confirmations. Jump straight into the first real question.
+- **Minimize friction.** No "are you ready?" prompts in the final tutorial. No unnecessary confirmations. Jump straight into the first real question.
 - **Ask only at real decision points.** Don't ask when there's a sensible default. Don't ask when Claude can detect the answer.
-- **Give instructions for external actions.** When the user must leave the terminal (e.g., to create tokens), tell them exactly where to go, what to click, and what to come back with. Provide direct URLs when possible.
-- **Never handle secrets.** Instruct users to run sensitive commands in a separate terminal. Never accept, echo, or store secrets in conversation.
-- **Track everything collected.** All user inputs feed into later steps (file generation, config creation). Keep a running record.
+- **Give instructions for external actions.** When the tutorial user must leave the terminal (e.g., to create tokens), tell them exactly where to go, what to click, and what to come back with. Provide direct URLs when possible.
+- **Never handle secrets.** Instruct tutorial users to run sensitive commands in a separate terminal. Never accept, echo, or store secrets in conversation.
 
-### Structure
+### CHECKPOINT 2: Present the outline for approval
 
-Organize the tutorial into **phases**. Each phase groups related steps. A typical setup wizard has:
+Present the proposed tutorial flow as a numbered outline. For each phase, show:
 
-1. **Welcome + choices** — What are we setting up? Which options does the user want?
-2. **Credential/prerequisite setup** — One section per integration. External actions + secret storage.
-3. **Configuration generation** — Use everything collected to generate config files, templates, or resources.
-4. **Validation** — Run the result, check for errors, confirm success.
+- The phase name
+- What happens in that phase (bullet points)
+- What the tutorial user will be asked or told to do
+- What Claude will automate
 
-Keep the total phase count low. A setup wizard rarely needs more than 3-5 phases. A learning tutorial can have more, but each should be completable in a few minutes.
+Example format:
+
+> **Proposed tutorial outline:**
+>
+> **Phase 1: Welcome + Provider Selection**
+> - Welcome message explaining what this tutorial sets up
+> - User picks which integrations to configure (numbered list)
+>
+> **Phase 2: GitHub Setup** *(conditional — only if selected)*
+> - Instructions to create a Personal Access Token with link to GitHub's token page
+> - User stores the token as a secret in a separate terminal
+> - Claude validates the secret exists
+>
+> **Phase 3: Generate Configuration**
+> - Claude generates the config file using all collected inputs
+> - Shows summary of what was generated
+>
+> **Phase 4: Validate + Next Steps**
+> - Claude runs validation command
+> - Success message with links to docs for advanced configuration
+>
+> **Slash command name:** `/setup`
+>
+> **Want me to adjust anything? Add or remove phases? Change the order? Rename the command?**
+
+Wait for the user's feedback. They may want to:
+
+- Reorder phases
+- Add or remove steps
+- Change what's automated vs. manual
+- Adjust the level of detail in certain sections
+- Rename the slash command
+- Change the target audience or tone
+
+Iterate on the outline until the user approves it. Only then move to file generation.
 
 ---
 
-## Phase 3: Create the File Structure
+## Phase 3: Generate the Tutorial Files
 
-The tutorial lives inside the target repo under `.claude/`. Create these files:
+Once the outline is approved, generate the files. The tutorial lives inside the target repo under `.claude/`.
 
-### 1. Slash command launcher: `.claude/commands/<name>.md`
+### Files to create
+
+#### 1. Slash command launcher: `.claude/commands/<name>.md`
 
 This is what the user invokes with `/<name>`. It should be minimal — its only job is to silently load the behavioral rules and script, then begin.
 
@@ -81,61 +155,30 @@ Do this SILENTLY — don't announce what you're doing:
 3. Begin immediately — start with the welcome message from the script
 ```
 
-The `description` field in the YAML frontmatter appears in Claude Code's command list, so make it clear and user-facing (e.g., "Interactive setup wizard" or "Guided onboarding tutorial").
+The `description` field appears in Claude Code's command list, so make it clear and user-facing.
 
 If the tutorial needs tools beyond the defaults (Read, Write, Bash, Glob, Grep), add an `allowed-tools` list in the frontmatter.
 
-### 2. Behavioral rules: `.claude/<name>-instructions.md`
+#### 2. Behavioral rules: `.claude/<name>-instructions.md`
 
-This file tells Claude **how to behave** during the tutorial. It is read once at the start and governs the entire session. Include these sections:
+This file tells Claude **how to behave** during the tutorial. It is read once at the start and governs the entire session. Include these rules:
 
-#### Core behavior rules
+- **No fourth-wall breaking.** Never mention scripts, instruction files, or internal mechanics.
+- **Follow the script.** Execute each step in order. Don't skip or improvise unless the user asks.
+- **Respect STOP markers.** Pause and wait for user input. Never continue past a STOP without a response.
+- **Handle USER markers.** Accept reasonable variations of expected input.
+- **Execute ACTION markers.** Run commands or file operations, then report the result.
+- **Process conditional blocks.** `[Bracketed text]` is conditional — only execute if the condition is met.
+- **No filler prompts.** Never add "Ready?", "Shall we begin?", "Let's go!" — just proceed.
+- **Security.** Never accept secrets in conversation. Always direct users to a separate terminal.
+- **Numbered lists for choices.** Users reply with numbers, not sentences.
+- **Provide direct URLs** for any external action (token creation pages, OAuth setup, etc.).
+- **Track all collected input** — it feeds into file/config generation later.
+- **Define success criteria** — what "done" looks like at the end.
 
-- **No fourth-wall breaking.** Never mention scripts, instruction files, or internal mechanics. Act as a knowledgeable guide.
-- **Follow the script.** Execute each step in order. Don't skip, reorder, or improvise unless the user asks.
-- **Respect STOP markers.** When the script says `STOP:`, pause and wait for user input. Never continue past a STOP without a response.
-- **Handle USER markers.** `USER:` describes expected input. Accept reasonable variations.
-- **Execute ACTION markers.** `ACTION:` means Claude runs a command or performs a file operation. Do it, then report the result.
-- **Process conditional blocks.** `[Bracketed text]` is conditional — only show/execute it if the condition is met.
+#### 3. Tutorial script: `.claude/<name>-script.md`
 
-#### Pacing
-
-- Wait for user responses at every STOP point.
-- Don't rush, but stay focused on outcomes.
-- Never add filler prompts ("Ready?", "Shall we begin?", "Let's go!").
-
-#### Error handling
-
-- If a command fails, show the error and suggest a fix before continuing.
-- If the user seems lost, offer to clarify the current step.
-- If a step can't be completed (missing tool, permission denied), acknowledge it and offer an alternative or skip.
-
-#### Security
-
-- Never ask the user to paste secrets or tokens into the conversation.
-- Never run secret-storage commands yourself — always instruct the user to do it in a separate terminal.
-- If a user accidentally pastes a secret, do not echo it. Remind them to use a separate terminal and move on.
-
-#### Input collection
-
-- When presenting choices, use numbered lists. Users reply with numbers (e.g., "1" or "1, 3").
-- Keep prompts short and scannable. Bold the option names, one-line descriptions.
-- Track all collected input — it feeds into file/config generation later.
-
-#### Links and external resources
-
-- When directing users to external pages (token creation, OAuth setup, documentation), provide the full URL.
-- Tell the user what they're going to and why.
-
-#### Success criteria
-
-- At the end of the behavioral rules file, define what "done" looks like. E.g., "The tutorial is complete when [specific config file] exists and [validation command] succeeds."
-
-### 3. Tutorial script: `.claude/<name>-script.md`
-
-This is the actual content of the tutorial. It uses a marker system that the behavioral rules teach Claude to interpret.
-
-#### Marker reference
+The actual content of the tutorial, using the marker system:
 
 | Marker | Meaning |
 |---|---|
@@ -145,114 +188,47 @@ This is the actual content of the tutorial. It uses a marker system that the beh
 | `[Condition]` | Conditional block — only if the condition is true. |
 | `---` | Phase or section break. |
 
-#### Script template
+Write the script following the approved outline from Checkpoint 2. For each phase:
 
-```markdown
-# <Tutorial Title>
+- Be specific — exact URLs, exact commands, exact scopes/permissions.
+- Use code blocks for every command the user needs to run.
+- Include examples when asking for input (e.g., "Enter your repo, like `org/repo-name`").
+- Validate after each critical step.
+- End with next steps and links to further documentation.
+- Add an "Important Notes for Claude" section at the end for edge cases and fallback behaviors.
+- End with a "Success Criteria" checklist of verifiable outcomes.
 
-## Phase 1: <Phase Name>
+#### 4. Project context: `CLAUDE.md` (root)
 
-<Welcome message and context. Set expectations — what will this tutorial do?>
+If the repo doesn't already have a `CLAUDE.md`, create one with a project description, key file paths, and available slash commands. If one exists, add the new command to it.
 
-<First real question or prompt for the user.>
+### CHECKPOINT 3: Review generated files
 
-STOP: Wait for the user's response.
+After generating the files, present a summary to the user:
 
-USER: <Description of expected input>
+> **Here's what I created:**
+>
+> - `.claude/commands/<name>.md` — Slash command launcher
+> - `.claude/<name>-instructions.md` — Behavioral rules ([brief summary of key rules])
+> - `.claude/<name>-script.md` — Tutorial script with [N] phases:
+>   1. [Phase 1 summary]
+>   2. [Phase 2 summary]
+>   3. ...
+> - `CLAUDE.md` — [Created / Updated] with project context
+>
+> **Want me to walk through any section in detail, or adjust anything before we update the README?**
 
-ACTION: <What Claude does with the input>
-
-<Feedback to the user about what happened.>
-
-[If user chose option X]
-## Phase 2a: <Option X Setup>
-
-<Instructions specific to this choice. Include URLs for external actions.>
-
-<Command the user runs in a separate terminal, formatted as a code block:>
-
-```
-<sensitive-command example>
-```
-
-**Do not paste the value here — run this in a separate terminal.**
-
-STOP: Wait for user to confirm they've completed this step.
-
-USER: Confirms completion.
-
-ACTION: <Validation step Claude runs to check it worked>
-[End condition]
-
-## Phase N: <Final Phase>
-
-ACTION: <Generate config files, run final setup, etc.>
-
-<Success message. Tell the user what was created, what to do next, and where to find things.>
+Let the user review. They may want to read specific files, adjust wording, change the flow, or tweak the tone. Make edits as requested.
 
 ---
 
-## Important Notes for Claude
+## Phase 4: Update the README
 
-- <Edge case handling>
-- <Fallback behaviors>
-- <Things to watch out for>
-
-## Success Criteria
-
-- [ ] <Specific, verifiable outcome 1>
-- [ ] <Specific, verifiable outcome 2>
-- [ ] <Specific, verifiable outcome 3>
-```
-
-### 4. Project context: `CLAUDE.md` (root)
-
-If the repo doesn't already have a `CLAUDE.md`, create one. It provides ambient context that Claude loads automatically.
-
-Include:
-- One-paragraph project description
-- Key file paths and what they contain
-- Available slash commands (including the new tutorial)
-- Any repo conventions Claude should know about
-
-If a `CLAUDE.md` already exists, add the new slash command to it rather than replacing it.
-
----
-
-## Phase 4: Write the Content
-
-With the structure in place, write the actual tutorial content.
-
-### Content guidelines
-
-- **Be specific.** Don't say "create an API token." Say "Go to Settings → Developer → Personal Access Tokens → Generate New Token. Select these scopes: [list]. Set expiration to [recommendation]."
-- **Show, don't tell.** When Claude generates a file, show a brief summary of what was generated and where it was saved. Don't dump the entire file into chat.
-- **Use code blocks for commands.** Every command the user needs to run should be in a fenced code block they can copy.
-- **Provide direct URLs.** Link to the exact page, not the documentation homepage.
-- **Include examples.** When asking for input (like a repository name or team ID), show the expected format: "Enter your repo (e.g., `org/repo-name`)."
-- **Validate after each critical step.** After credential setup, run a test. After config generation, verify the file. After deployment, check status.
-- **End with next steps.** Tell the user what to do after the tutorial. Link to documentation, common workflows, or advanced configuration.
-
-### What Claude generates vs. what the user does
-
-Be deliberate about this split:
-
-| Claude does | User does |
-|---|---|
-| Create/edit config files | Create API tokens and credentials |
-| Run non-sensitive CLI commands | Store secrets via separate terminal |
-| Validate setup and report results | Approve choices and provide input |
-| Generate templates from collected input | Configure external services (webhooks, OAuth) |
-
----
-
-## Phase 5: Update the README
-
-The tutorial only works if people know it exists. Update the repo's README so the guided setup is the **first thing users see** in the getting-started section.
+The tutorial only works if people know it exists.
 
 ### What to add
 
-Add a section near the top of the README (before any manual setup instructions) with this structure:
+Add a section near the top of the README (before any manual setup instructions):
 
 ```markdown
 ## Quick Start with Claude Code
@@ -260,7 +236,7 @@ Add a section near the top of the README (before any manual setup instructions) 
 **Prerequisites:** [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed.
 
 ```bash
-git clone <repo-url> && cd <repo-name> && claude /setup
+git clone <repo-url> && cd <repo-name> && claude /<command>
 ```
 
 That's it — the wizard walks you through the rest.
@@ -268,27 +244,42 @@ That's it — the wizard walks you through the rest.
 
 Key rules:
 
-- **One command.** Clone, cd, and launch the wizard in a single copy-paste line. The user should go from zero to running wizard with one action.
-- **Put it before manual instructions.** The guided path should be the default, prominent option. Manual steps become the fallback for users who don't have Claude Code.
-- **List only real prerequisites.** If the wizard handles installing or checking dependencies, don't list them here. Only list things the user must have before they can run the command (Claude Code itself, and any system-level tools the wizard can't install).
-- **Keep it short.** The README section is a signpost, not documentation. The wizard itself handles explanation and guidance.
+- **One command.** Clone, cd, and launch the wizard in a single copy-paste line.
+- **Put it before manual instructions.** The guided path should be the default. Manual steps become the fallback.
+- **Keep it short.** The README section is a signpost — the wizard handles the detail.
 
-### If manual instructions already exist
+If manual instructions already exist, don't remove them. Rename the section to "Manual Setup" and place it after the guided setup section.
 
-Don't remove them. Rename the existing section to something like "Manual Setup" or "Setup Without Claude Code" and place it after the guided setup section. Add a horizontal rule (`---`) between them to create clear visual separation.
+### CHECKPOINT 4: Confirm README changes
+
+Show the user the README diff or the new section before committing it. Ask:
+
+> **Here's the Quick Start section I'd add to the README. Look good?**
+
+Wait for approval before writing.
 
 ---
 
-## Phase 6: Validate and Refine
+## Phase 5: Final Validation
 
-After creating all files:
+After all files are created and the README is updated:
 
 1. **Read through the complete flow** end to end. Check that every STOP has a matching USER, every ACTION is achievable, and every conditional block closes properly.
 2. **Check that no secrets are handled in conversation.** Every credential step should instruct the user to use a separate terminal.
 3. **Verify all URLs are correct and point to the right pages.**
-4. **Ensure the generated config/template logic accounts for all combinations** of user choices.
-5. **Confirm the success criteria are testable** — each checkbox should be something you can verify with a command or file check.
-6. **Verify the README** has the one-line quick start command and it points to the correct repo URL and slash command name.
+4. **Ensure the config generation logic accounts for all combinations** of user choices.
+5. **Confirm the success criteria are testable** — each checkbox should be verifiable with a command or file check.
+6. **Verify the README** has the one-line quick start command with the correct repo URL and slash command name.
+
+### CHECKPOINT 5: Final sign-off
+
+> **Everything looks good on my end. Here's a summary of what was created:**
+>
+> - [List of all files created/modified]
+> - Slash command: `/<name>`
+> - Quick start: `git clone <url> && cd <repo> && claude /<name>`
+>
+> **Want to test it, or are we good?**
 
 ---
 
@@ -296,20 +287,25 @@ After creating all files:
 
 ### Do
 
-- Jump straight into the first meaningful question.
+- Present findings and get confirmation before designing.
+- Propose an outline and get approval before generating.
+- Show generated files and get sign-off before updating the README.
+- Jump straight into the first meaningful question (in the final tutorial).
 - Use numbered lists for choices — users type a number instead of a sentence.
-- Provide the exact `cd` path, exact URL, exact command — no ambiguity.
-- Design for the happy path first, then handle edge cases in the "Important Notes for Claude" section at the end of the script.
+- Provide the exact URL, exact command, exact path — no ambiguity.
+- Design for the happy path first, handle edge cases in "Important Notes for Claude."
 - Keep the slash command launcher tiny. All logic lives in the instructions and script files.
 - Separate behavioral rules from content. The instructions file is reusable; the script is specific.
-- Make the README's quick start a single `git clone ... && cd ... && claude /<command>` line. One copy-paste action from zero to wizard.
+- Make the README's quick start a single `git clone ... && cd ... && claude /<command>` line.
 
 ### Don't
 
-- Don't ask "are you ready?" or "shall we continue?" — just continue.
+- Don't generate files without the user reviewing the outline first.
+- Don't assume you understand the repo perfectly — always present findings and ask.
+- Don't skip checkpoints even if you're confident. The user is the author; their intent matters.
 - Don't accept secrets in conversation, ever, for any reason.
-- Don't use interactive terminal UI features that may not render in all environments. Stick to plain text prompts with numbered options.
-- Don't make Claude announce what files it's reading or what internal steps it's taking.
+- Don't use interactive terminal UI features that may not render in all environments. Stick to plain text prompts.
+- Don't make Claude announce what files it's reading or what internal steps it's taking (in the final tutorial).
 - Don't put all content in a single file. The three-file split (launcher, rules, script) keeps things maintainable.
 - Don't forget to track user inputs throughout — they feed into the final generation step.
 - Don't include validation steps that require services or APIs that might not be set up yet.
